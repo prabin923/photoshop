@@ -378,6 +378,71 @@ function removeBackground(): void {
   }, 100);
 }
 
+function applyTextBehind(): void {
+  const obj = canvas.getActiveObject();
+  if (!obj || obj.type !== 'image') { showToast('Select an image subject.'); return; }
+
+  $('processingText').textContent = 'Separating subject and placing text...';
+  $('processingOverlay').classList.remove('hidden');
+
+  setTimeout(async () => {
+    try {
+      const img = obj as FabricImage;
+      const imgEl = img.getElement() as HTMLImageElement;
+      const tc = document.createElement('canvas');
+      tc.width = imgEl.naturalWidth || imgEl.width;
+      tc.height = imgEl.naturalHeight || imgEl.height;
+      const ctx = tc.getContext('2d')!;
+      ctx.drawImage(imgEl, 0, 0);
+      
+      const imageData = ctx.getImageData(0, 0, tc.width, tc.height);
+      const d = imageData.data;
+      const threshold = 60;
+      const bg = { r: d[0], g: d[1], b: d[2] };
+      for (let i = 0; i < d.length; i += 4) {
+        const diff = Math.abs(d[i]-bg.r) + Math.abs(d[i+1]-bg.g) + Math.abs(d[i+2]-bg.b);
+        if (diff < threshold) d[i+3] = 0;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      const dataURL = tc.toDataURL();
+      await FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' }).then((subjectImg: FabricImage) => {
+        subjectImg.set({ 
+          left: img.left, top: img.top, 
+          scaleX: img.scaleX, scaleY: img.scaleY, 
+          angle: img.angle 
+        });
+        (subjectImg as any).name = 'Subject (Foreground)';
+
+        const text = new IText('TEXT BEHIND', {
+          left: (img.left || 0) + (img.getScaledWidth() / 2),
+          top: (img.top || 0) + (img.getScaledHeight() * 0.4),
+          fontSize: 140,
+          fontFamily: 'Impact',
+          fill: '#ffffff',
+          originX: 'center',
+          textAlign: 'center'
+        });
+        (text as any).name = 'Background Text';
+
+        canvas.add(text);
+        canvas.add(subjectImg);
+        
+        canvas.bringObjectToFront(subjectImg);
+        canvas.setActiveObject(text);
+        canvas.renderAll();
+        saveHistory();
+        updateLayers();
+      });
+      showToast('Text placed behind subject!');
+    } catch (err) {
+      showToast('Subject separation failed.');
+      console.error(err);
+    } finally {
+      $('processingOverlay').classList.add('hidden');
+    }
+  }, 1000);
+}
 // ─── Properties Panel ───
 function updateProperties(): void {
   const obj = canvas.getActiveObject();
@@ -399,14 +464,31 @@ function updateProperties(): void {
   $input('propCornerRadius').value = String((obj as any).rx || 0);
 
   const isText = ['i-text', 'text', 'textbox'].includes(obj.type!);
+  const isImage = obj.type === 'image';
+  
   $('textPropsTitle').style.display = isText ? 'block' : 'none';
   $('textProps').style.display = isText ? 'grid' : 'none';
+  $('btnTextBehind').style.display = isImage ? 'block' : 'none';
+
+  $select('propBlendMode').value = (obj as any).globalCompositeOperation || 'source-over';
 
   if (isText) {
     const t = obj as IText;
     $select('propFontFamily').value = t.fontFamily || 'Inter';
     $input('propFontSize').value = String(t.fontSize || 32);
     $select('propFontWeight').value = String(t.fontWeight || 'normal');
+    $input('propCharSpacing').value = String(t.charSpacing || 0);
+    $input('propLineHeight').value = String(t.lineHeight || 1.16);
+    
+    $('btnBold').classList.toggle('active', t.fontWeight === 'bold' || t.fontWeight === 900);
+    $('btnItalic').classList.toggle('active', t.fontStyle === 'italic');
+    $('btnUnderline').classList.toggle('active', t.underline);
+    
+    // Shadow/Glow state indicators
+    const hasShadow = !!obj.shadow && (obj.shadow as any).color !== 'rgba(99,102,241,0.8)';
+    const hasGlow = !!obj.shadow && (obj.shadow as any).color === 'rgba(99,102,241,0.8)';
+    $('btnShadow').classList.toggle('active', hasShadow);
+    $('btnGlow').classList.toggle('active', hasGlow);
   }
   updateLayers();
 }
@@ -651,10 +733,31 @@ export function initEditor(): void {
   propChange('propCornerRadius', (o, v) => { if (o.type === 'rect') (o as Rect).set({ rx: v, ry: v }); });
 
   $input('propOpacity').addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
     const obj = canvas.getActiveObject();
-    if (obj) { obj.set('opacity', parseFloat((e.target as HTMLInputElement).value)); canvas.renderAll(); }
+    if (obj) { obj.set('opacity', parseFloat(val)); canvas.renderAll(); }
   });
   $input('propOpacity').addEventListener('change', saveHistory);
+
+  $select('propBlendMode').addEventListener('change', (e) => {
+    const val = (e.target as HTMLSelectElement).value;
+    const obj = canvas.getActiveObject();
+    if (obj) { (obj as any).set('globalCompositeOperation', val); canvas.renderAll(); saveHistory(); }
+  });
+
+  $input('propCharSpacing').addEventListener('input', (e) => {
+    const val = parseInt((e.target as HTMLInputElement).value) || 0;
+    const obj = canvas.getActiveObject();
+    if (obj && (obj instanceof IText)) { obj.set('charSpacing', val); canvas.renderAll(); }
+  });
+  $input('propCharSpacing').addEventListener('change', () => saveHistory());
+
+  $input('propLineHeight').addEventListener('input', (e) => {
+    const val = parseFloat((e.target as HTMLInputElement).value) || 1.16;
+    const obj = canvas.getActiveObject();
+    if (obj && (obj instanceof IText)) { obj.set('lineHeight', val); canvas.renderAll(); }
+  });
+  $input('propLineHeight').addEventListener('change', () => saveHistory());
 
   $input('propFill').addEventListener('input', (e) => {
     const obj = canvas.getActiveObject();
@@ -700,15 +803,53 @@ export function initEditor(): void {
   });
 
   // Actions
+  $('btnShadow').addEventListener('click', () => {
+    const obj = canvas.getActiveObject();
+    if (obj) {
+      if (obj.shadow) {
+        obj.set('shadow', null);
+        $('btnShadow').classList.remove('active');
+      } else {
+        obj.set('shadow', { color: 'rgba(0,0,0,0.5)', blur: 15, offsetX: 5, offsetY: 5 } as any);
+        $('btnShadow').classList.add('active');
+      }
+      canvas.renderAll(); saveHistory();
+    }
+  });
+
+  $('btnGlow').addEventListener('click', () => {
+    const obj = canvas.getActiveObject();
+    if (obj) {
+      if (obj.shadow && (obj.shadow as any).color === 'rgba(99,102,241,0.8)') {
+        obj.set('shadow', null);
+        $('btnGlow').classList.remove('active');
+      } else {
+        obj.set('shadow', { color: 'rgba(99,102,241,0.8)', blur: 25, offsetX: 0, offsetY: 0 } as any);
+        $('btnGlow').classList.add('active');
+      }
+      canvas.renderAll(); saveHistory();
+    }
+  });
+
   $('btnDuplicate').addEventListener('click', () => {
     const obj = canvas.getActiveObject();
     if (!obj) return;
     obj.clone().then((cloned: FabricObject) => {
+      canvas.discardActiveObject();
       cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
-      (cloned as any).name = ((obj as any).name || 'Object') + ' Copy';
-      canvas.add(cloned); canvas.setActiveObject(cloned); canvas.renderAll(); saveHistory();
+      if (cloned.type === 'activeSelection') {
+        cloned.canvas = canvas;
+        (cloned as ActiveSelection).forEachObject((o: FabricObject) => canvas.add(o));
+        cloned.setCoords();
+      } else {
+        canvas.add(cloned);
+      }
+      canvas.setActiveObject(cloned);
+      canvas.renderAll(); saveHistory();
     });
   });
+
+  $('btnTextBehind').addEventListener('click', applyTextBehind);
   $('btnBringFront').addEventListener('click', () => { const o = canvas.getActiveObject(); if (o) { canvas.bringObjectToFront(o); saveHistory(); updateLayers(); } });
   $('btnSendBack').addEventListener('click', () => { const o = canvas.getActiveObject(); if (o) { canvas.sendObjectToBack(o); saveHistory(); updateLayers(); } });
   $('btnDeleteObj').addEventListener('click', deleteSelected);

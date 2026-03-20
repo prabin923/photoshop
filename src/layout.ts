@@ -187,6 +187,22 @@ function buildRightPanel(): string {
           <div class="prop-row"><label>Stroke</label><input type="color" id="propStroke" class="prop-color"></div>
           <div class="prop-row"><label>Stroke W</label><input type="number" id="propStrokeWidth" class="prop-input" min="0" step="1" value="0"></div>
           <div class="prop-row"><label>Corner R</label><input type="number" id="propCornerRadius" class="prop-input" min="0" step="1" value="0"></div>
+          <div class="prop-row full"><label>Blending Mode</label>
+            <select id="propBlendMode" class="prop-select">
+              <option value="source-over">Normal</option>
+              <option value="multiply">Multiply</option>
+              <option value="screen">Screen</option>
+              <option value="overlay">Overlay</option>
+              <option value="darken">Darken</option>
+              <option value="lighten">Lighten</option>
+              <option value="color-dodge">Color Dodge</option>
+              <option value="color-burn">Color Burn</option>
+              <option value="hard-light">Hard Light</option>
+              <option value="soft-light">Soft Light</option>
+              <option value="difference">Difference</option>
+              <option value="exclusion">Exclusion</option>
+            </select>
+          </div>
         </div>
         <h3 class="section-title" id="textPropsTitle" style="display:none">Text</h3>
         <div class="prop-grid" id="textProps" style="display:none">
@@ -206,6 +222,8 @@ function buildRightPanel(): string {
               <option value="600">SemiBold</option><option value="900">Black</option>
             </select>
           </div>
+          <div class="prop-row"><label>L-Spacing</label><input type="number" id="propCharSpacing" class="prop-input" step="10" value="0"></div>
+          <div class="prop-row"><label>L-Height</label><input type="number" id="propLineHeight" class="prop-input" step="0.1" value="1.16"></div>
           <div class="prop-row full"><label>Align</label>
             <div class="btn-group">
               <button class="mini-btn" data-align="left">◧</button>
@@ -220,12 +238,19 @@ function buildRightPanel(): string {
               <button class="mini-btn" id="btnUnderline"><u>U</u></button>
             </div>
           </div>
+          <div class="prop-row full"><label>Effects</label>
+             <div class="btn-group">
+              <button class="mini-btn" id="btnShadow" title="Toggle Shadow">Shadow</button>
+              <button class="mini-btn" id="btnGlow" title="Toggle Glow">Glow</button>
+            </div>
+          </div>
         </div>
         <h3 class="section-title">Actions</h3>
         <div class="action-buttons">
           <button class="action-btn" id="btnDuplicate">Duplicate</button>
           <button class="action-btn" id="btnBringFront">Bring Front</button>
           <button class="action-btn" id="btnSendBack">Send Back</button>
+          <button class="action-btn" id="btnTextBehind" style="display:none">Text Behind</button>
           <button class="action-btn danger" id="btnDeleteObj">Delete</button>
         </div>
       </div>
