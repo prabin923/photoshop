@@ -1,16 +1,13 @@
-// PixelForge — Core Canvas Editor Engine (TypeScript)
-// Built for Fabric.js v7 API
-
-import {
-  Canvas, Rect, Ellipse, Triangle, Line, IText, FabricImage,
-  PencilBrush, Pattern, FabricObject, ActiveSelection,
+import { 
+  Canvas, Rect, Ellipse, Triangle, Line, IText, FabricImage, 
+  PencilBrush, ActiveSelection, FabricObject, Pattern, filters as fabricFilters 
 } from 'fabric';
-import * as fabricFilters from 'fabric';
-import type { ToolName, PresetName } from './types';
-import { TEMPLATE_SIZES, MAX_HISTORY } from './types';
 import { generateAIImage } from './ai';
 import type { AIStyle } from './ai';
+import { hasGeminiKey, setGeminiApiKey, refineDesignPrompt, generateSmartLayout, generateSingleElement, generateVectorGraphic } from './gemini';
 import { DESIGN_TEMPLATES } from './templates';
+import type { ToolName, PresetName } from './types';
+import { TEMPLATE_SIZES, MAX_HISTORY } from './types';
 
 // ─── Utility ───
 function $(id: string): HTMLElement {
@@ -543,7 +540,7 @@ function applyFilters(): void {
 
   const img = obj as FabricImage;
   const f: any[] = [];
-  const { filters: F } = fabricFilters;
+  const F = fabricFilters;
 
   const b = parseFloat($input('filterBrightness').value);
   if (b !== 0) f.push(new F.Brightness({ brightness: b }));
@@ -588,7 +585,7 @@ function applyPreset(name: PresetName): void {
   if (!obj || obj.type !== 'image') { showToast('Select an image to apply a preset.'); return; }
 
   const img = obj as FabricImage;
-  const { filters: F } = fabricFilters;
+  const F = fabricFilters;
   const f: any[] = [];
 
   switch (name) {
@@ -936,14 +933,29 @@ export function initEditor(): void {
   });
   $('doExport').addEventListener('click', exportDesign);
 
-  // ── AI Generation ──
   const doAIGenerate = async (prompt: string, style: AIStyle) => {
     if (!prompt.trim()) { showToast('Enter a prompt to generate.'); return; }
-    $('processingText').textContent = 'AI is generating your design...';
-    $('processingOverlay').classList.remove('hidden');
+    
+    let refinedPrompt = prompt;
+    const overlay = $('processingOverlay');
+    const textEl = $('processingText');
+
+    if (hasGeminiKey()) {
+      textEl.textContent = 'Gemini is refining your prompt...';
+      overlay.classList.remove('hidden');
+      try {
+        refinedPrompt = await refineDesignPrompt(prompt);
+      } catch (e) {
+        console.warn('Gemini optimization skipped:', e);
+      }
+    }
+
+    textEl.textContent = 'Generating your design...';
+    overlay.classList.remove('hidden');
+    
     try {
       const dataURL = await generateAIImage({
-        prompt, width: canvasWidth, height: canvasHeight,
+        prompt: refinedPrompt, width: canvasWidth, height: canvasHeight,
         style, mode: 'generate',
       });
       await FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' }).then((img: FabricImage) => {
@@ -956,12 +968,12 @@ export function initEditor(): void {
         saveHistory();
         updateLayers();
       });
-      showToast('\u2728 AI image generated!');
-    } catch (err) {
-      showToast('AI generation failed.');
+      showToast('\u2728 Design generated!');
+    } catch (err: any) {
+      showToast('AI generation failed: ' + (err.message || 'Error'));
       console.error(err);
     } finally {
-      $('processingOverlay').classList.add('hidden');
+      overlay.classList.add('hidden');
     }
   };
 
@@ -969,6 +981,83 @@ export function initEditor(): void {
     const prompt = ($('aiPrompt') as HTMLTextAreaElement).value;
     const style = $select('aiStyle').value as AIStyle;
     doAIGenerate(prompt, style);
+  });
+
+  // Gemini API Settings
+  $('btnAISettings').addEventListener('click', () => {
+    ($('geminiApiKey') as HTMLInputElement).value = localStorage.getItem('pixelforge_gemini_key') || '';
+    $('aiSettingsModal').classList.remove('hidden');
+  });
+  $('closeAISettingsModal').addEventListener('click', () => $('aiSettingsModal').classList.add('hidden'));
+  $('cancelAISettingsModal').addEventListener('click', () => $('aiSettingsModal').classList.add('hidden'));
+  $('saveGeminiKey').addEventListener('click', () => {
+    const key = ($('geminiApiKey') as HTMLInputElement).value;
+    setGeminiApiKey(key);
+    $('aiSettingsModal').classList.add('hidden');
+    showToast('Gemini API configured!');
+  });
+
+  $('btnGeminiLayout').addEventListener('click', async () => {
+    const prompt = ($('aiPrompt') as HTMLTextAreaElement).value;
+    if (!prompt.trim()) { showToast('Enter a prompt for Gemini.'); return; }
+    if (!hasGeminiKey()) { showToast('Configure Gemini API first \u2699\ufe0f'); return; }
+
+    $('processingText').textContent = 'Gemini is designing your layout...';
+    $('processingOverlay').classList.remove('hidden');
+    try {
+      const objects = await generateSmartLayout(prompt);
+      if (Array.isArray(objects)) {
+        // Clear background images if it's a "fresh" start (optional)
+        // canvas.clear(); // User might not want this
+        
+        for (const config of objects) {
+          let obj: FabricObject | null = null;
+          const common = {
+            left: config.left || Math.random() * (canvasWidth - 100),
+            top: config.top || Math.random() * (canvasHeight - 100),
+            fill: config.fill || '#6366f1',
+            opacity: config.opacity !== undefined ? config.opacity : 1,
+            angle: config.angle || 0,
+            shadow: config.shadow || null,
+          };
+
+          if (config.type === 'rect') {
+            obj = new Rect({ ...common, width: config.width || 100, height: config.height || 100 });
+          } else if (config.type === 'circle') {
+            obj = new Ellipse({ ...common, rx: (config.width || 100) / 2, ry: (config.height || 100) / 2 });
+          } else if (config.type === 'triangle') {
+            obj = new Triangle({ ...common, width: config.width || 100, height: config.height || 100 });
+          } else if (config.type === 'i-text') {
+            obj = new IText(config.text || 'Design Element', {
+              ...common,
+              fontSize: config.fontSize || 40,
+              fontFamily: config.fontFamily || 'Inter',
+              fontWeight: config.fontWeight || 'bold'
+            });
+          } else if (config.type === 'image' && config.subject) {
+            // Fetch subject image from Unsplash
+            const url = `https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&h=400&q=80`;
+            await FabricImage.fromURL(url).then(img => {
+              img.set({ ...common, left: config.left, top: config.top });
+              if (config.width) img.scaleToWidth(config.width);
+              canvas.add(img);
+            });
+            continue;
+          }
+
+          if (obj) canvas.add(obj);
+        }
+        canvas.renderAll();
+        saveHistory();
+        updateLayers();
+        showToast('\u2728 Gemini design applied!');
+      }
+    } catch (err: any) {
+      showToast('Gemini design failed: ' + err.message);
+      console.error(err);
+    } finally {
+      $('processingOverlay').classList.add('hidden');
+    }
   });
 
   $('btnAIEdit').addEventListener('click', async () => {
@@ -1011,12 +1100,148 @@ export function initEditor(): void {
     }
   });
 
-  // Quick Generate buttons
-  document.querySelectorAll<HTMLElement>('.ai-quick-btn').forEach(btn => {
+  // ── AI Add Single Element ──
+  const addAIElement = async (prompt: string) => {
+    if (!prompt.trim()) { showToast('Describe the element you want to add.'); return; }
+    if (!hasGeminiKey()) { showToast('Gemini API not available.'); return; }
+
+    $('processingText').textContent = 'Creating your element...';
+    $('processingOverlay').classList.remove('hidden');
+    try {
+      const config = await generateSingleElement(prompt, canvasWidth, canvasHeight);
+      let obj: FabricObject | null = null;
+      const common = {
+        left: config.left ?? canvasWidth / 2 - 50,
+        top: config.top ?? canvasHeight / 2 - 50,
+        fill: config.fill || '#6366f1',
+        opacity: config.opacity !== undefined ? config.opacity : 1,
+        angle: config.angle || 0,
+        stroke: config.stroke || undefined,
+        strokeWidth: config.strokeWidth || 0,
+        shadow: config.shadow || null,
+      };
+
+      if (config.type === 'rect') {
+        obj = new Rect({ ...common, width: config.width || 200, height: config.height || 150, rx: config.rx || 0, ry: config.ry || 0 });
+      } else if (config.type === 'circle' || config.type === 'ellipse') {
+        obj = new Ellipse({ ...common, rx: (config.width || 150) / 2, ry: (config.height || 150) / 2 });
+      } else if (config.type === 'triangle') {
+        obj = new Triangle({ ...common, width: config.width || 150, height: config.height || 130 });
+      } else if (config.type === 'i-text' || config.type === 'text') {
+        obj = new IText(config.text || 'Text', {
+          ...common,
+          fontSize: config.fontSize || 48,
+          fontFamily: config.fontFamily || 'Inter',
+          fontWeight: config.fontWeight || 'bold',
+        });
+      } else if (config.type === 'line') {
+        obj = new Line([0, 0, config.width || 400, 0], {
+          ...common,
+          stroke: config.stroke || '#ffffff',
+          strokeWidth: config.strokeWidth || 3,
+          fill: '',
+        });
+      } else {
+        // Default to rectangle for unknown types
+        obj = new Rect({ ...common, width: config.width || 200, height: config.height || 150 });
+      }
+
+      if (obj) {
+        (obj as any).name = 'AI: ' + prompt.slice(0, 25);
+        canvas.add(obj);
+        canvas.setActiveObject(obj);
+        canvas.renderAll();
+        saveHistory();
+        updateLayers();
+        showToast('🪄 Element added!');
+      }
+    } catch (err: any) {
+      showToast('Failed to add element: ' + (err.message || 'Error'));
+      console.error(err);
+    } finally {
+      $('processingOverlay').classList.add('hidden');
+    }
+  };
+
+  $('btnAIAddElement').addEventListener('click', () => {
+    const prompt = ($('aiElementPrompt') as HTMLInputElement).value;
+    addAIElement(prompt);
+  });
+
+  // Enter key support for element input
+  $('aiElementPrompt').addEventListener('keydown', (e: Event) => {
+    if ((e as KeyboardEvent).key === 'Enter') {
+      const prompt = ($('aiElementPrompt') as HTMLInputElement).value;
+      addAIElement(prompt);
+    }
+  });
+
+  // Quick element preset buttons
+  document.querySelectorAll<HTMLElement>('.ai-eq').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.dataset.element || '';
+      if (prompt) addAIElement(prompt);
+    });
+  });
+
+  // ── AI Graphic Generation ──
+  const addAIVectorGraphic = async (prompt: string) => {
+    if (!prompt.trim()) { showToast('Describe the graphic you want.'); return; }
+
+    $('processingText').textContent = 'AI is generating your graphic...';
+    $('processingOverlay').classList.remove('hidden');
+    try {
+      const imageUrl = await generateVectorGraphic(prompt);
+      await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' }).then((img: FabricImage) => {
+        // Scale to a good visible size
+        const targetWidth = Math.min(350, canvasWidth * 0.4);
+        img.scaleToWidth(targetWidth);
+        img.set({
+          left: (canvasWidth - targetWidth) / 2,
+          top: (canvasHeight - (img.height! * img.scaleY!)) / 2,
+        });
+        (img as any).name = '🎨 ' + prompt.slice(0, 25);
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        canvas.renderAll();
+        saveHistory();
+        updateLayers();
+        showToast('🎨 AI graphic added!');
+      });
+    } catch (err: any) {
+      showToast('Graphic generation failed: ' + (err.message || 'Error'));
+      console.error(err);
+    } finally {
+      $('processingOverlay').classList.add('hidden');
+    }
+  };
+
+  $('btnAIVector').addEventListener('click', () => {
+    const prompt = ($('aiVectorPrompt') as HTMLInputElement).value;
+    addAIVectorGraphic(prompt);
+  });
+
+  $('aiVectorPrompt').addEventListener('keydown', (e: Event) => {
+    if ((e as KeyboardEvent).key === 'Enter') {
+      const prompt = ($('aiVectorPrompt') as HTMLInputElement).value;
+      addAIVectorGraphic(prompt);
+    }
+  });
+
+  // Quick vector preset buttons
+  document.querySelectorAll<HTMLElement>('.ai-vq').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.dataset.vector || '';
+      if (prompt) addAIVectorGraphic(prompt);
+    });
+  });
+
+  // Quick Generate buttons (background presets)
+  document.querySelectorAll<HTMLElement>('.ai-quick-btn:not(.ai-eq):not(.ai-vq)').forEach(btn => {
     btn.addEventListener('click', () => {
       const prompt = btn.dataset.aiprompt || '';
       const style = (btn.dataset.aistyle || 'auto') as AIStyle;
-      doAIGenerate(prompt, style);
+      if (prompt) doAIGenerate(prompt, style);
     });
   });
 

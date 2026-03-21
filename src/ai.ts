@@ -11,7 +11,7 @@ export interface AIGenerationOptions {
 }
 
 export type AIStyle = 
-  | 'auto' | 'abstract' | 'gradient' | 'geometric' | 'neon' 
+  | 'auto' | 'realistic' | 'portrait' | 'abstract' | 'gradient' | 'geometric' | 'neon' 
   | 'minimal' | 'vaporwave' | 'cosmic' | 'grunge' | 'retro';
 
 interface ColorPalette {
@@ -40,9 +40,11 @@ const KEYWORD_PALETTES: Record<string, ColorPalette> = {
   horror:    { primary: '#9b2226', secondary: '#660708', accent: '#bb3e03', bg: '#0a0000', text: '#e5e5e5' },
   chill:     { primary: '#84a98c', secondary: '#52796f', accent: '#cad2c5', bg: '#0d1a14', text: '#cad2c5' },
   energy:    { primary: '#ffbe0b', secondary: '#fb5607', accent: '#ff006e', bg: '#1a0f00', text: '#ffffff' },
-  rap:       { primary: '#6a0dad', secondary: '#ff1493', accent: '#ffd700', bg: '#0a0014', text: '#ffffff' },
-  pop:       { primary: '#ff69b4', secondary: '#ff1493', accent: '#00ffff', bg: '#1a0028', text: '#ffffff' },
   rock:      { primary: '#b22222', secondary: '#333333', accent: '#dcdcdc', bg: '#0a0a0a', text: '#ffffff' },
+  person:    { primary: '#ffdbac', secondary: '#f1c27d', accent: '#8d5524', bg: '#1a100a', text: '#ffffff' },
+  nature:    { primary: '#2d6a4f', secondary: '#95d5b2', accent: '#74c69d', bg: '#081c15', text: '#ffffff' },
+  city:      { primary: '#4895ef', secondary: '#4361ee', accent: '#3f37c9', bg: '#0a0a0f', text: '#ffffff' },
+  food:      { primary: '#ff9f1c', secondary: '#ffbf69', accent: '#ffffff', bg: '#1a0f00', text: '#ffffff' },
 };
 
 const DEFAULT_PALETTE: ColorPalette = { primary: '#6366f1', secondary: '#a855f7', accent: '#ec4899', bg: '#0f0f1a', text: '#ffffff' };
@@ -106,16 +108,82 @@ async function generateDesign(
     case 'cosmic': renderCosmic(ctx, w, h, palette); break;
     case 'grunge': renderGrunge(ctx, w, h, palette); break;
     case 'retro': renderRetro(ctx, w, h, palette); break;
+    case 'realistic': {
+        const subject = detectSubject(prompt) || 'nature';
+        await renderSubjectDesign(ctx, w, h, subject, palette);
+        break;
+    }
+    case 'portrait': {
+        const subject = detectSubject(prompt) || 'smiling';
+        await renderSubjectDesign(ctx, w, h, subject, palette);
+        break;
+    }
     case 'abstract':
-    default: renderAbstract(ctx, w, h, palette); break;
+    default:
+      // Try to find a subject if it's not a background style
+      const subject = detectSubject(prompt);
+      if (subject) {
+        await renderSubjectDesign(ctx, w, h, subject, palette);
+      } else {
+        renderAbstract(ctx, w, h, palette);
+      }
+      break;
   }
 
   // Add text from prompt if it looks like a title
   addSmartText(ctx, w, h, prompt, palette);
 }
 
+function detectSubject(prompt: string): string | null {
+  const p = prompt.toLowerCase();
+  const subjects = [
+    'person', 'man', 'woman', 'girl', 'boy', 'dog', 'cat', 'car', 'mountain',
+    'forest', 'ocean', 'city', 'building', 'food', 'coffee', 'tech', 'laptop',
+    'house', 'landscape', 'flower', 'tree', 'animal', 'bird', 'smiling'
+  ];
+  
+  for (const s of subjects) {
+    if (p.includes(s)) return s;
+  }
+  return null;
+}
+
+async function renderSubjectDesign(ctx: CanvasRenderingContext2D, w: number, h: number, subject: string, p: ColorPalette): Promise<void> {
+  const baseUrl = 'https://images.unsplash.com/';
+  let photoId = 'photo-1500648767791-00dcc994a43e'; // Default person
+  
+  if (subject === 'mountain') photoId = 'photo-1464822759023-fed622ff2c3b';
+  if (subject === 'nature' || subject === 'forest') photoId = 'photo-1441974231531-c6227db76b6e';
+  if (subject === 'city') photoId = 'photo-1449824913935-59a10b8d2000';
+  if (subject === 'ocean') photoId = 'photo-1507525428034-b723cf961d3e';
+  if (subject === 'smiling') photoId = 'photo-1544005313-94ddf0286df2';
+  if (subject === 'car') photoId = 'photo-1494976388531-d1058494cdd8';
+  if (subject === 'dog') photoId = 'photo-1517841905240-472988babdf9';
+  if (subject === 'coffee') photoId = 'photo-1509042239860-f550ce710b93';
+
+  const finalUrl = `${baseUrl}${photoId}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
+
+  try {
+    const img = await loadImage(finalUrl);
+    ctx.drawImage(img, 0, 0, w, h);
+    
+    // Add a stylish overlay to make it look "processed"
+    const overlay = ctx.createLinearGradient(0, 0, 0, h);
+    overlay.addColorStop(0, hexToRgba(p.bg, 0.2));
+    overlay.addColorStop(1, hexToRgba(p.primary, 0.5));
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+  } catch (e) {
+    renderAbstract(ctx, w, h, p);
+  }
+}
+
 function detectStyle(prompt: string): AIStyle {
   const p = prompt.toLowerCase();
+  if (p.includes('photo') || p.includes('real') || p.includes('shot') || p.includes('camera')) return 'realistic';
+  if (p.includes('person') || p.includes('face') || p.includes('portrait') || p.includes('woman') || p.includes('man')) return 'portrait';
   if (p.includes('neon') || p.includes('glow')) return 'neon';
   if (p.includes('geometric') || p.includes('shapes')) return 'geometric';
   if (p.includes('gradient') || p.includes('blend')) return 'gradient';

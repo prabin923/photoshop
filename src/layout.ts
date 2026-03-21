@@ -19,6 +19,29 @@ export function buildLayout(): string {
     ${buildNewProjectModal()}
     ${buildExportModal()}
     ${buildAIModal()}
+    <!-- Gemini API Settings Modal -->
+    <div id="aiSettingsModal" class="modal-overlay hidden">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Google Gemini Configuration</h2>
+          <button class="modal-close" id="closeAISettingsModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">Enter your <b>Google AI Studio API Key</b> to unlock Gemini-driven designs.</p>
+          <div class="input-field">
+            <label>Gemini API Key</label>
+            <input type="password" id="geminiApiKey" class="modal-input" placeholder="AIzaSy...">
+          </div>
+          <div class="info-box">
+            <p>Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn secondary" id="cancelAISettingsModal">Cancel</button>
+          <button class="modal-btn primary" id="saveGeminiKey">Save Configuration</button>
+        </div>
+      </div>
+    </div>
     <div class="processing-overlay hidden" id="processingOverlay">
       <div class="processing-spinner"></div>
       <p id="processingText">Processing...</p>
@@ -272,6 +295,7 @@ function buildRightPanel(): string {
     <div class="panel-content" id="panel-ai">
       <div class="ai-header">
         <div class="ai-badge">✨ AI Studio</div>
+        <button class="ai-settings-btn" id="btnAISettings" title="Configure Gemini API">⚙️ Settings</button>
       </div>
 
       <h3 class="section-title">Generate Image</h3>
@@ -281,6 +305,8 @@ function buildRightPanel(): string {
         <label class="ai-label">Style</label>
         <select id="aiStyle" class="prop-select ai-select">
           <option value="auto">🔮 Auto-Detect</option>
+          <option value="realistic">📸 Realistic / Photo</option>
+          <option value="portrait">👤 Portrait / Face</option>
           <option value="abstract">🌊 Abstract</option>
           <option value="gradient">🌈 Gradient</option>
           <option value="geometric">🔷 Geometric</option>
@@ -294,7 +320,11 @@ function buildRightPanel(): string {
 
         <button class="ai-generate-btn" id="btnAIGenerate">
           <span class="ai-btn-icon">✦</span>
-          <span>Generate to Canvas</span>
+          <span>Generate Background</span>
+        </button>
+        <button class="ai-gemini-btn" id="btnGeminiLayout">
+          <span class="ai-btn-icon">💎</span>
+          <span>Smart Design Sketch</span>
         </button>
       </div>
 
@@ -305,6 +335,42 @@ function buildRightPanel(): string {
           <span class="ai-btn-icon">✎</span>
           <span>Edit with AI</span>
         </button>
+      </div>
+
+      <h3 class="section-title">AI Add Element</h3>
+      <div class="ai-section">
+        <input type="text" id="aiElementPrompt" class="modal-input" placeholder="e.g. red circle, big title GAME OVER, golden star..." style="margin-bottom:8px; font-size:12px; padding:10px 12px;">
+        <button class="ai-element-btn" id="btnAIAddElement">
+          <span class="ai-btn-icon">🪄</span>
+          <span>Add Element with AI</span>
+        </button>
+        <div class="ai-element-quick" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; margin-top:8px;">
+          <button class="ai-quick-btn ai-eq" data-element="Large bold title saying 'HELLO'">📝 Title</button>
+          <button class="ai-quick-btn ai-eq" data-element="A vibrant red circle badge">🔴 Circle</button>
+          <button class="ai-quick-btn ai-eq" data-element="A blue rectangle banner">🟦 Banner</button>
+          <button class="ai-quick-btn ai-eq" data-element="A golden star shape">⭐ Star</button>
+          <button class="ai-quick-btn ai-eq" data-element="A thin white horizontal divider line">➖ Divider</button>
+          <button class="ai-quick-btn ai-eq" data-element="A subtitle text saying 'Subscribe Now'">💬 CTA</button>
+        </div>
+      </div>
+
+      <h3 class="section-title">AI Graphic Elements</h3>
+      <div class="ai-section">
+        <input type="text" id="aiVectorPrompt" class="modal-input" placeholder="e.g. fire flame, golden trophy, cute monster, neon logo..." style="margin-bottom:8px; font-size:12px; padding:10px 12px;">
+        <button class="ai-vector-btn" id="btnAIVector">
+          <span class="ai-btn-icon">🎨</span>
+          <span>Generate AI Graphic</span>
+        </button>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:4px; margin-top:8px;">
+          <button class="ai-quick-btn ai-vq" data-vector="realistic fire flame burning bright orange">🔥 Fire</button>
+          <button class="ai-quick-btn ai-vq" data-vector="golden trophy cup award shiny metallic">🏆 Trophy</button>
+          <button class="ai-quick-btn ai-vq" data-vector="cartoon rocket ship launching with smoke">🚀 Rocket</button>
+          <button class="ai-quick-btn ai-vq" data-vector="3D red glossy heart with light reflection">❤️ Heart</button>
+          <button class="ai-quick-btn ai-vq" data-vector="royal gold crown with jewels and gems">👑 Crown</button>
+          <button class="ai-quick-btn ai-vq" data-vector="electric lightning bolt neon blue energy">⚡ Bolt</button>
+          <button class="ai-quick-btn ai-vq" data-vector="sparkling diamond gem crystal 3D render">💎 Diamond</button>
+          <button class="ai-quick-btn ai-vq" data-vector="gaming controller neon glow RGB lights">🎮 Gaming</button>
+        </div>
       </div>
 
       <h3 class="section-title">Quick Generate</h3>
