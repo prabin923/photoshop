@@ -1,10 +1,10 @@
 import { 
   Canvas, Rect, Ellipse, Triangle, Line, IText, FabricImage, 
-  PencilBrush, ActiveSelection, FabricObject, Pattern, filters as fabricFilters 
+  PencilBrush, ActiveSelection, FabricObject, Pattern, filters as fabricFilters
 } from 'fabric';
 import { generateAIImage } from './ai';
 import type { AIStyle } from './ai';
-import { hasGeminiKey, setGeminiApiKey, refineDesignPrompt, generateSmartLayout, generateSingleElement, generateVectorGraphic } from './gemini';
+import { hasGeminiKey, refineDesignPrompt, generateSmartLayout, generateSingleElement, generateVectorGraphic } from './gemini';
 import { DESIGN_TEMPLATES } from './templates';
 import type { ToolName, PresetName } from './types';
 import { TEMPLATE_SIZES, MAX_HISTORY } from './types';
@@ -199,6 +199,10 @@ function setTool(tool: ToolName): void {
       break;
     case 'removebg':
       removeBackground();
+      setTool('select');
+      break;
+    case 'mask':
+      showToast('Select an image, then a shape above it, and click Apply Mask in properties.');
       setTool('select');
       break;
     default: break;
@@ -440,6 +444,179 @@ function applyTextBehind(): void {
     }
   }, 1000);
 }
+
+// ─── Masking ───
+function canApplyMask(): boolean {
+  const objects = canvas.getObjects();
+  if (objects.length < 2) return false;
+  const active = canvas.getActiveObject();
+  if (!active) return false;
+  if (active.type === 'activeSelection') {
+    const sel = active as ActiveSelection;
+    const items = sel.getObjects();
+    if (items.length !== 2) return false;
+    const hasImage = items.some(o => o.type === 'image');
+    const hasShape = items.some(o => ['rect','ellipse','circle','triangle','path'].includes(o.type!));
+    return hasImage && hasShape;
+  }
+  if (active.type === 'image') {
+    const idx = objects.indexOf(active);
+    if (idx < objects.length - 1) {
+      const above = objects[idx + 1];
+      return ['rect','ellipse','circle','triangle','path'].includes(above.type!);
+    }
+  }
+  return false;
+}
+
+function applyMask(): void {
+  const objects = canvas.getObjects();
+  let imageObj: FabricImage | null = null;
+  let maskObj: FabricObject | null = null;
+  const active = canvas.getActiveObject();
+  if (!active) { showToast('Select an image and a shape to mask.'); return; }
+
+  if (active.type === 'activeSelection') {
+    const items = (active as ActiveSelection).getObjects();
+    imageObj = items.find(o => o.type === 'image') as FabricImage || null;
+    maskObj = items.find(o => ['rect','ellipse','circle','triangle','path'].includes(o.type!)) || null;
+  } else if (active.type === 'image') {
+    imageObj = active as FabricImage;
+    const idx = objects.indexOf(active);
+    if (idx < objects.length - 1) {
+      const above = objects[idx + 1];
+      if (['rect','ellipse','circle','triangle','path'].includes(above.type!)) maskObj = above;
+    }
+  }
+
+  if (!imageObj || !maskObj) { showToast('Need an image and a shape to create a mask.'); return; }
+
+  $('processingText').textContent = 'Applying clipping mask...';
+  $('processingOverlay').classList.remove('hidden');
+
+  setTimeout(() => {
+    try {
+      const imgEl = imageObj!.getElement() as HTMLImageElement;
+      const tc = document.createElement('canvas');
+      const imgW = imageObj!.getScaledWidth();
+      const imgH = imageObj!.getScaledHeight();
+      tc.width = imgW;
+      tc.height = imgH;
+      const ctx = tc.getContext('2d')!;
+
+      ctx.save();
+      const mLeft = (maskObj!.left || 0) - (imageObj!.left || 0);
+      const mTop = (maskObj!.top || 0) - (imageObj!.top || 0);
+
+      ctx.beginPath();
+      if (maskObj!.type === 'rect') {
+        const rx = (maskObj! as Rect).rx || 0;
+        const mw = maskObj!.getScaledWidth();
+        const mh = maskObj!.getScaledHeight();
+        if (rx > 0) {
+          ctx.moveTo(mLeft + rx, mTop);
+          ctx.arcTo(mLeft + mw, mTop, mLeft + mw, mTop + mh, rx);
+          ctx.arcTo(mLeft + mw, mTop + mh, mLeft, mTop + mh, rx);
+          ctx.arcTo(mLeft, mTop + mh, mLeft, mTop, rx);
+          ctx.arcTo(mLeft, mTop, mLeft + mw, mTop, rx);
+        } else {
+          ctx.rect(mLeft, mTop, mw, mh);
+        }
+      } else if (maskObj!.type === 'ellipse' || maskObj!.type === 'circle') {
+        const mw = maskObj!.getScaledWidth();
+        const mh = maskObj!.getScaledHeight();
+        ctx.ellipse(mLeft + mw / 2, mTop + mh / 2, mw / 2, mh / 2, 0, 0, Math.PI * 2);
+      } else if (maskObj!.type === 'triangle') {
+        const mw = maskObj!.getScaledWidth();
+        const mh = maskObj!.getScaledHeight();
+        ctx.moveTo(mLeft + mw / 2, mTop);
+        ctx.lineTo(mLeft + mw, mTop + mh);
+        ctx.lineTo(mLeft, mTop + mh);
+      } else {
+        const mw = maskObj!.getScaledWidth();
+        const mh = maskObj!.getScaledHeight();
+        ctx.rect(mLeft, mTop, mw, mh);
+      }
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.drawImage(imgEl, 0, 0, imgW, imgH);
+      ctx.restore();
+
+      const dataURL = tc.toDataURL('image/png');
+      const newImg = new Image();
+      newImg.onload = () => {
+        const fabricImg = new FabricImage(newImg, {
+          left: imageObj!.left,
+          top: imageObj!.top,
+          scaleX: 1,
+          scaleY: 1,
+          angle: imageObj!.angle,
+        });
+        (fabricImg as any).name = ((imageObj! as any).name || 'Image') + ' (Masked)';
+        (fabricImg as any)._pf_maskData = {
+          origSrc: imgEl.src,
+          origLeft: imageObj!.left,
+          origTop: imageObj!.top,
+          origScaleX: imageObj!.scaleX,
+          origScaleY: imageObj!.scaleY,
+          origAngle: imageObj!.angle,
+          origName: (imageObj! as any).name || 'Image',
+        };
+
+        canvas.discardActiveObject();
+        canvas.remove(imageObj!);
+        canvas.remove(maskObj!);
+        canvas.add(fabricImg);
+        canvas.setActiveObject(fabricImg);
+        canvas.renderAll();
+        saveHistory();
+        updateLayers();
+        updateProperties();
+        showToast('🎭 Clipping mask applied!');
+        $('processingOverlay').classList.add('hidden');
+      };
+      newImg.src = dataURL;
+    } catch (err) {
+      console.error(err);
+      showToast('Mask failed.');
+      $('processingOverlay').classList.add('hidden');
+    }
+  }, 100);
+}
+
+function removeMask(): void {
+  const obj = canvas.getActiveObject();
+  if (!obj || !(obj as any)._pf_maskData) { showToast('No mask to remove.'); return; }
+
+  const data = (obj as any)._pf_maskData;
+  $('processingText').textContent = 'Removing mask...';
+  $('processingOverlay').classList.remove('hidden');
+
+  FabricImage.fromURL(data.origSrc, { crossOrigin: 'anonymous' }).then((img: FabricImage) => {
+    img.set({
+      left: data.origLeft,
+      top: data.origTop,
+      scaleX: data.origScaleX,
+      scaleY: data.origScaleY,
+      angle: data.origAngle,
+    });
+    (img as any).name = data.origName;
+    canvas.remove(obj);
+    canvas.add(img);
+    canvas.setActiveObject(img);
+    canvas.renderAll();
+    saveHistory();
+    updateLayers();
+    updateProperties();
+    showToast('Mask removed!');
+    $('processingOverlay').classList.add('hidden');
+  }).catch(() => {
+    showToast('Could not restore original image.');
+    $('processingOverlay').classList.add('hidden');
+  });
+}
+
 // ─── Properties Panel ───
 function updateProperties(): void {
   const obj = canvas.getActiveObject();
@@ -462,10 +639,14 @@ function updateProperties(): void {
 
   const isText = ['i-text', 'text', 'textbox'].includes(obj.type!);
   const isImage = obj.type === 'image';
+  const isMasked = !!(obj as any)._pf_maskData;
+  const canMask = canApplyMask();
   
   $('textPropsTitle').style.display = isText ? 'block' : 'none';
   $('textProps').style.display = isText ? 'grid' : 'none';
   $('btnTextBehind').style.display = isImage ? 'block' : 'none';
+  $('btnApplyMask').style.display = canMask ? 'block' : 'none';
+  $('btnRemoveMask').style.display = isMasked ? 'block' : 'none';
 
   $select('propBlendMode').value = (obj as any).globalCompositeOperation || 'source-over';
 
@@ -847,6 +1028,8 @@ export function initEditor(): void {
   });
 
   $('btnTextBehind').addEventListener('click', applyTextBehind);
+  $('btnApplyMask').addEventListener('click', applyMask);
+  $('btnRemoveMask').addEventListener('click', removeMask);
   $('btnBringFront').addEventListener('click', () => { const o = canvas.getActiveObject(); if (o) { canvas.bringObjectToFront(o); saveHistory(); updateLayers(); } });
   $('btnSendBack').addEventListener('click', () => { const o = canvas.getActiveObject(); if (o) { canvas.sendObjectToBack(o); saveHistory(); updateLayers(); } });
   $('btnDeleteObj').addEventListener('click', deleteSelected);
@@ -981,20 +1164,6 @@ export function initEditor(): void {
     const prompt = ($('aiPrompt') as HTMLTextAreaElement).value;
     const style = $select('aiStyle').value as AIStyle;
     doAIGenerate(prompt, style);
-  });
-
-  // Gemini API Settings
-  $('btnAISettings').addEventListener('click', () => {
-    ($('geminiApiKey') as HTMLInputElement).value = localStorage.getItem('pixelforge_gemini_key') || '';
-    $('aiSettingsModal').classList.remove('hidden');
-  });
-  $('closeAISettingsModal').addEventListener('click', () => $('aiSettingsModal').classList.add('hidden'));
-  $('cancelAISettingsModal').addEventListener('click', () => $('aiSettingsModal').classList.add('hidden'));
-  $('saveGeminiKey').addEventListener('click', () => {
-    const key = ($('geminiApiKey') as HTMLInputElement).value;
-    setGeminiApiKey(key);
-    $('aiSettingsModal').classList.add('hidden');
-    showToast('Gemini API configured!');
   });
 
   $('btnGeminiLayout').addEventListener('click', async () => {

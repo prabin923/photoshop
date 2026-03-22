@@ -264,6 +264,10 @@ html, body {
 .action-btn.danger { color: var(--danger); }
 .action-btn.danger:hover { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); }
 .action-btn.full-width { grid-column: 1 / -1; margin-top: 4px; }
+#btnApplyMask { background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(168,85,247,0.15)); border-color: rgba(99,102,241,0.3); color: var(--accent-hover); }
+#btnApplyMask:hover { background: linear-gradient(135deg, rgba(99,102,241,0.25), rgba(168,85,247,0.25)); border-color: var(--accent); }
+#btnRemoveMask { color: var(--text-secondary); }
+#btnRemoveMask:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); color: var(--danger); }
 
 /* Layers */
 .layers-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -448,13 +452,7 @@ html, body {
 .format-btn:hover { border-color: var(--border-medium); }
 .format-btn.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent-hover); }
 
-.ai-settings-btn {
-  background: var(--bg-active); border: 1px solid var(--accent); color: var(--text-primary);
-  font-size: 10px; font-weight: 800; padding: 6px 14px; border-radius: 6px; cursor: pointer;
-  transition: var(--transition); text-transform: uppercase; letter-spacing: 0.05em;
-  display: flex; align-items: center; gap: 4px;
-}
-.ai-settings-btn:hover { background: var(--accent); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px var(--accent-subtle); }
+
 
 .ai-gemini-btn {
   width: 100%; height: 42px; background: linear-gradient(135deg, #4285f4, #9b72cb);

@@ -2,7 +2,7 @@
 
 export type ToolName = 
   | 'select' | 'hand' | 'text' | 'rect' | 'circle' 
-  | 'triangle' | 'line' | 'draw' | 'eraser' | 'crop' | 'removebg';
+  | 'triangle' | 'line' | 'draw' | 'eraser' | 'crop' | 'removebg' | 'mask';
 
 export type PanelName = 'properties' | 'layers' | 'templates' | 'filters';
 

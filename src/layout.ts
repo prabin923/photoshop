@@ -19,29 +19,7 @@ export function buildLayout(): string {
     ${buildNewProjectModal()}
     ${buildExportModal()}
     ${buildAIModal()}
-    <!-- Gemini API Settings Modal -->
-    <div id="aiSettingsModal" class="modal-overlay hidden">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Google Gemini Configuration</h2>
-          <button class="modal-close" id="closeAISettingsModal">✕</button>
-        </div>
-        <div class="modal-body">
-          <p class="modal-desc">Enter your <b>Google AI Studio API Key</b> to unlock Gemini-driven designs.</p>
-          <div class="input-field">
-            <label>Gemini API Key</label>
-            <input type="password" id="geminiApiKey" class="modal-input" placeholder="AIzaSy...">
-          </div>
-          <div class="info-box">
-            <p>Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</p>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="modal-btn secondary" id="cancelAISettingsModal">Cancel</button>
-          <button class="modal-btn primary" id="saveGeminiKey">Save Configuration</button>
-        </div>
-      </div>
-    </div>
+
     <div class="processing-overlay hidden" id="processingOverlay">
       <div class="processing-spinner"></div>
       <p id="processingText">Processing...</p>
@@ -128,6 +106,7 @@ function buildLeftToolbar(): string {
     <div class="tool-divider"></div>
     <div class="tool-group">
       ${toolBtn('removebg', 'BG Remove', '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 15h18"/><path d="M3 9h6"/>')}
+      ${toolBtn('mask', 'Mask', '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="5"/><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/>')}
     </div>
     <div class="tool-spacer"></div>
     <div class="color-picker-group">
@@ -274,6 +253,8 @@ function buildRightPanel(): string {
           <button class="action-btn" id="btnBringFront">Bring Front</button>
           <button class="action-btn" id="btnSendBack">Send Back</button>
           <button class="action-btn" id="btnTextBehind" style="display:none">Text Behind</button>
+          <button class="action-btn" id="btnApplyMask" style="display:none">🎭 Apply Mask</button>
+          <button class="action-btn" id="btnRemoveMask" style="display:none">✕ Remove Mask</button>
           <button class="action-btn danger" id="btnDeleteObj">Delete</button>
         </div>
       </div>
@@ -295,7 +276,6 @@ function buildRightPanel(): string {
     <div class="panel-content" id="panel-ai">
       <div class="ai-header">
         <div class="ai-badge">✨ AI Studio</div>
-        <button class="ai-settings-btn" id="btnAISettings" title="Configure Gemini API">⚙️ Settings</button>
       </div>
 
       <h3 class="section-title">Generate Image</h3>
