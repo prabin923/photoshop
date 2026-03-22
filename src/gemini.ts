@@ -86,32 +86,36 @@ async function geminiRequest(prompt: string, expectJson: boolean = false): Promi
 /**
  * Generates a full canvas layout as Fabric.js-compatible object configs
  */
-export async function generateSmartLayout(prompt: string): Promise<any[]> {
+export async function generateSmartLayout(prompt: string, canvasW: number = 1280, canvasH: number = 720): Promise<any[]> {
+  const safeLeft = Math.floor(canvasW * 0.9);
+  const safeTop = Math.floor(canvasH * 0.9);
+  const centerX = Math.floor(canvasW / 2);
+  
   const systemPrompt = `You are "nanobanana", an expert image generation software which can create social media posts and YouTube thumbnails with ease. You are creating a stunning, professional design layout.
 Output ONLY a valid JSON array (no markdown, no backticks, no explanation).
 
-CANVAS SIZE: 1280 x 720 pixels.
+CANVAS SIZE: ${canvasW} x ${canvasH} pixels.
 
 STRICT POSITIONING RULES (CRITICAL — elements MUST NOT go outside the canvas):
-- All "left" values MUST be between 0 and 1200 (leave at least 80px from right edge)
-- All "top" values MUST be between 0 and 640 (leave at least 80px from bottom edge)
-- For text: left + (text length × fontSize × 0.5) must be < 1280
-- For shapes: left + width must be ≤ 1280, top + height must be ≤ 720
-- Center important text horizontally: use left = 640 with originX = "center"
-- Keep a 40px safe margin from all edges
+- All "left" values MUST be between 0 and ${safeLeft} (leave space from right edge)
+- All "top" values MUST be between 0 and ${safeTop} (leave space from bottom edge)
+- For text: left + (text length × fontSize × 0.5) must be < ${canvasW}
+- For shapes: left + width must be ≤ ${canvasW}, top + height must be ≤ ${canvasH}
+- Center important text horizontally: use left = ${centerX} with originX = "center"
+- Keep a safe margin from all edges
 
 ELEMENT TYPES:
-Shape: {"type":"rect","left":0,"top":0,"width":1280,"height":720,"fill":"#1a1a2e","opacity":1,"rx":0,"ry":0}
+Shape: {"type":"rect","left":0,"top":0,"width":${canvasW},"height":${canvasH},"fill":"#1a1a2e","opacity":1,"rx":0,"ry":0}
 Circle: {"type":"circle","left":100,"top":100,"width":200,"height":200,"fill":"#6366f1","opacity":0.3}
-Text: {"type":"i-text","text":"HELLO","left":640,"top":300,"fontSize":72,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","originX":"center","textAlign":"center"}
+Text: {"type":"i-text","text":"HELLO","left":${centerX},"top":${Math.floor(canvasH*0.4)},"fontSize":72,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","originX":"center","textAlign":"center"}
 
 DESIGN RULES:
-1. ALWAYS start with a full-canvas background rect (left:0, top:0, width:1280, height:720)
+1. ALWAYS start with a full-canvas background rect (left:0, top:0, width:${canvasW}, height:${canvasH})
 2. Use dark, rich backgrounds: #0a0a12, #0f0f1a, #1a1a2e, #0c0c1d (NOT white or light colors)
 3. Add 2-3 decorative shapes (circles, rects) with low opacity (0.1-0.3) for depth
 4. Use a curated color palette — pick 2-3 harmonious accent colors
-5. Title text should be large (64-120px), bold, and use Impact or Inter font
-6. Subtitle text should be smaller (20-36px), lighter weight, and slightly transparent
+5. Title text should be large, bold, and use Impact or Inter font
+6. Subtitle text should be smaller, lighter weight, and slightly transparent
 7. Use shadows on text for glow effects: {"color":"rgba(99,102,241,0.5)","blur":20,"offsetX":0,"offsetY":0}
 8. Background elements first, then decorative shapes, then text LAST
 9. Keep text short and impactful — use 1-4 words per text element
@@ -119,14 +123,14 @@ DESIGN RULES:
 
 EXAMPLE OUTPUT for "gaming thumbnail":
 [
-  {"type":"rect","left":0,"top":0,"width":1280,"height":720,"fill":"#0a0a12","opacity":1},
-  {"type":"rect","left":600,"top":-50,"width":350,"height":820,"fill":"#ff0844","opacity":0.9,"angle":-12},
-  {"type":"circle","left":100,"top":50,"width":400,"height":400,"fill":"#ff0844","opacity":0.08},
-  {"type":"rect","left":0,"top":0,"width":1280,"height":5,"fill":"#ff0844","opacity":1},
-  {"type":"i-text","text":"EPIC","left":80,"top":200,"fontSize":120,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","shadow":{"color":"rgba(255,8,68,0.4)","blur":30,"offsetX":0,"offsetY":0}},
-  {"type":"i-text","text":"GAMING","left":80,"top":330,"fontSize":120,"fontFamily":"Impact","fontWeight":"bold","fill":"#ff0844"},
-  {"type":"i-text","text":"▶ WATCH NOW","left":80,"top":520,"fontSize":24,"fontFamily":"Inter","fontWeight":"800","fill":"#ffffff","opacity":0.8},
-  {"type":"rect","left":0,"top":695,"width":1280,"height":25,"fill":"#ff0844","opacity":1}
+  {"type":"rect","left":0,"top":0,"width":${canvasW},"height":${canvasH},"fill":"#0a0a12","opacity":1},
+  {"type":"rect","left":Math.floor(${canvasW}*0.5),"top":-50,"width":Math.floor(${canvasW}*0.3),"height":${canvasH + 100},"fill":"#ff0844","opacity":0.9,"angle":-12},
+  {"type":"circle","left":100,"top":50,"width":Math.floor(${canvasH}*0.6),"height":Math.floor(${canvasH}*0.6),"fill":"#ff0844","opacity":0.08},
+  {"type":"rect","left":0,"top":0,"width":${canvasW},"height":5,"fill":"#ff0844","opacity":1},
+  {"type":"i-text","text":"EPIC","left":80,"top":Math.floor(${canvasH}*0.3),"fontSize":Math.floor(${canvasH}*0.15),"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","shadow":{"color":"rgba(255,8,68,0.4)","blur":30,"offsetX":0,"offsetY":0}},
+  {"type":"i-text","text":"GAMING","left":80,"top":Math.floor(${canvasH}*0.45),"fontSize":Math.floor(${canvasH}*0.15),"fontFamily":"Impact","fontWeight":"bold","fill":"#ff0844"},
+  {"type":"i-text","text":"▶ WATCH NOW","left":80,"top":Math.floor(${canvasH}*0.75),"fontSize":Math.floor(${canvasH}*0.04),"fontFamily":"Inter","fontWeight":"800","fill":"#ffffff","opacity":0.8},
+  {"type":"rect","left":0,"top":Math.floor(${canvasH}-25),"width":${canvasW},"height":25,"fill":"#ff0844","opacity":1}
 ]
 
 Design request: "${prompt}"

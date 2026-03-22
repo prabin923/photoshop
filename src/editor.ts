@@ -1174,7 +1174,7 @@ export function initEditor(): void {
     $('processingText').textContent = 'Gemini is designing your layout...';
     $('processingOverlay').classList.remove('hidden');
     try {
-      const objects = await generateSmartLayout(prompt);
+      const objects = await generateSmartLayout(prompt, canvasWidth, canvasHeight);
       if (Array.isArray(objects)) {
         for (const config of objects) {
           let obj: FabricObject | null = null;
@@ -1190,9 +1190,9 @@ export function initEditor(): void {
           // Only clamp if not explicitly intended to be a full cover/background
           if (!(cWidth >= canvasWidth * 0.9 && cHeight >= canvasHeight * 0.9)) {
               if (safeLeft < 0) safeLeft = 0;
-              if (safeLeft > canvasWidth - 100) safeLeft = canvasWidth - Math.min(cWidth, 300);
+              if (safeLeft + cWidth > canvasWidth) safeLeft = Math.max(0, canvasWidth - cWidth);
               if (safeTop < 0) safeTop = 0;
-              if (safeTop > canvasHeight - 50) safeTop = canvasHeight - Math.min(cHeight, 200);
+              if (safeTop + cHeight > canvasHeight) safeTop = Math.max(0, canvasHeight - cHeight);
           }
 
           const common = {
