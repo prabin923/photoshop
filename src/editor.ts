@@ -1176,22 +1176,38 @@ export function initEditor(): void {
     try {
       const objects = await generateSmartLayout(prompt);
       if (Array.isArray(objects)) {
-        // Clear background images if it's a "fresh" start (optional)
-        // canvas.clear(); // User might not want this
-        
         for (const config of objects) {
           let obj: FabricObject | null = null;
+          
+          // Clamp positions to keep them inside the visual canvas area
+          // Assumes average element width of 200/height of 100 for clamping if left/top are too close to edge
+          const cWidth = config.width || 100;
+          const cHeight = config.height || 100;
+          
+          let safeLeft = config.left || 0;
+          let safeTop = config.top || 0;
+          
+          // Only clamp if not explicitly intended to be a full cover/background
+          if (!(cWidth >= canvasWidth * 0.9 && cHeight >= canvasHeight * 0.9)) {
+              if (safeLeft < 0) safeLeft = 0;
+              if (safeLeft > canvasWidth - 100) safeLeft = canvasWidth - Math.min(cWidth, 300);
+              if (safeTop < 0) safeTop = 0;
+              if (safeTop > canvasHeight - 50) safeTop = canvasHeight - Math.min(cHeight, 200);
+          }
+
           const common = {
-            left: config.left || Math.random() * (canvasWidth - 100),
-            top: config.top || Math.random() * (canvasHeight - 100),
+            left: safeLeft,
+            top: safeTop,
             fill: config.fill || '#6366f1',
             opacity: config.opacity !== undefined ? config.opacity : 1,
             angle: config.angle || 0,
             shadow: config.shadow || null,
+            originX: config.originX || 'left',
+            textAlign: config.textAlign || 'left'
           };
 
           if (config.type === 'rect') {
-            obj = new Rect({ ...common, width: config.width || 100, height: config.height || 100 });
+            obj = new Rect({ ...common, width: config.width || 100, height: config.height || 100, rx: config.rx || 0, ry: config.ry || 0 });
           } else if (config.type === 'circle') {
             obj = new Ellipse({ ...common, rx: (config.width || 100) / 2, ry: (config.height || 100) / 2 });
           } else if (config.type === 'triangle') {
@@ -1204,10 +1220,9 @@ export function initEditor(): void {
               fontWeight: config.fontWeight || 'bold'
             });
           } else if (config.type === 'image' && config.subject) {
-            // Fetch subject image from Unsplash
             const url = `https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&h=400&q=80`;
             await FabricImage.fromURL(url).then(img => {
-              img.set({ ...common, left: config.left, top: config.top });
+              img.set({ ...common });
               if (config.width) img.scaleToWidth(config.width);
               canvas.add(img);
             });
@@ -1219,7 +1234,7 @@ export function initEditor(): void {
         canvas.renderAll();
         saveHistory();
         updateLayers();
-        showToast('\u2728 Gemini design applied!');
+        showToast('✨ Gemini design applied!');
       }
     } catch (err: any) {
       showToast('Gemini design failed: ' + err.message);

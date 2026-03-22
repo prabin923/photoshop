@@ -14,8 +14,7 @@ export interface GeminiResponse {
 // Built-in key is the default; localStorage can override if user sets a custom one
 function getStoredKey(): string {
   const stored = localStorage.getItem('pixelforge_gemini_key');
-  // Ignore old invalid keys that got stuck in localStorage
-  if (stored && stored.startsWith('AIza') && stored !== 'AIzaSyDTaj0LCq5cLPxNQ3kG3vmlSKyvpWjobYw') {
+  if (stored && stored.startsWith('AIza')) {
     return stored;
   }
   return BUILT_IN_KEY;
@@ -88,26 +87,51 @@ async function geminiRequest(prompt: string, expectJson: boolean = false): Promi
  * Generates a full canvas layout as Fabric.js-compatible object configs
  */
 export async function generateSmartLayout(prompt: string): Promise<any[]> {
-  const systemPrompt = `You are an expert graphic designer. Generate a professional design layout.
-Output ONLY a valid JSON array (no markdown, no explanation, just the array).
-Each element must be a JSON object with these properties:
+  const systemPrompt = `You are "nanobanana", an expert image generation software which can create social media posts and YouTube thumbnails with ease. You are creating a stunning, professional design layout.
+Output ONLY a valid JSON array (no markdown, no backticks, no explanation).
 
-For shapes (rect/circle/triangle):
-{"type":"rect","left":0,"top":0,"width":1280,"height":720,"fill":"#1a1a2e","opacity":1}
+CANVAS SIZE: 1280 x 720 pixels.
 
-For text:
-{"type":"i-text","text":"HELLO","left":100,"top":100,"fontSize":72,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff"}
+STRICT POSITIONING RULES (CRITICAL — elements MUST NOT go outside the canvas):
+- All "left" values MUST be between 0 and 1200 (leave at least 80px from right edge)
+- All "top" values MUST be between 0 and 640 (leave at least 80px from bottom edge)
+- For text: left + (text length × fontSize × 0.5) must be < 1280
+- For shapes: left + width must be ≤ 1280, top + height must be ≤ 720
+- Center important text horizontally: use left = 640 with originX = "center"
+- Keep a 40px safe margin from all edges
 
-Rules:
-- Canvas is 1280x720
-- Use hex colors
-- Background elements first, text last
-- Make it look professional and modern
-- Use fonts: Impact, Inter, Arial
+ELEMENT TYPES:
+Shape: {"type":"rect","left":0,"top":0,"width":1280,"height":720,"fill":"#1a1a2e","opacity":1,"rx":0,"ry":0}
+Circle: {"type":"circle","left":100,"top":100,"width":200,"height":200,"fill":"#6366f1","opacity":0.3}
+Text: {"type":"i-text","text":"HELLO","left":640,"top":300,"fontSize":72,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","originX":"center","textAlign":"center"}
+
+DESIGN RULES:
+1. ALWAYS start with a full-canvas background rect (left:0, top:0, width:1280, height:720)
+2. Use dark, rich backgrounds: #0a0a12, #0f0f1a, #1a1a2e, #0c0c1d (NOT white or light colors)
+3. Add 2-3 decorative shapes (circles, rects) with low opacity (0.1-0.3) for depth
+4. Use a curated color palette — pick 2-3 harmonious accent colors
+5. Title text should be large (64-120px), bold, and use Impact or Inter font
+6. Subtitle text should be smaller (20-36px), lighter weight, and slightly transparent
+7. Use shadows on text for glow effects: {"color":"rgba(99,102,241,0.5)","blur":20,"offsetX":0,"offsetY":0}
+8. Background elements first, then decorative shapes, then text LAST
+9. Keep text short and impactful — use 1-4 words per text element
+10. Add accent lines or small shapes for visual interest
+
+EXAMPLE OUTPUT for "gaming thumbnail":
+[
+  {"type":"rect","left":0,"top":0,"width":1280,"height":720,"fill":"#0a0a12","opacity":1},
+  {"type":"rect","left":600,"top":-50,"width":350,"height":820,"fill":"#ff0844","opacity":0.9,"angle":-12},
+  {"type":"circle","left":100,"top":50,"width":400,"height":400,"fill":"#ff0844","opacity":0.08},
+  {"type":"rect","left":0,"top":0,"width":1280,"height":5,"fill":"#ff0844","opacity":1},
+  {"type":"i-text","text":"EPIC","left":80,"top":200,"fontSize":120,"fontFamily":"Impact","fontWeight":"bold","fill":"#ffffff","shadow":{"color":"rgba(255,8,68,0.4)","blur":30,"offsetX":0,"offsetY":0}},
+  {"type":"i-text","text":"GAMING","left":80,"top":330,"fontSize":120,"fontFamily":"Impact","fontWeight":"bold","fill":"#ff0844"},
+  {"type":"i-text","text":"▶ WATCH NOW","left":80,"top":520,"fontSize":24,"fontFamily":"Inter","fontWeight":"800","fill":"#ffffff","opacity":0.8},
+  {"type":"rect","left":0,"top":695,"width":1280,"height":25,"fill":"#ff0844","opacity":1}
+]
 
 Design request: "${prompt}"
 
-Respond with ONLY the JSON array, nothing else.`;
+Respond with ONLY the JSON array.`;
 
   const result = await geminiRequest(systemPrompt, true);
   return Array.isArray(result.json) ? result.json : [result.json];
@@ -144,7 +168,7 @@ Keep it brief and professional.`;
  * Returns exactly one Fabric.js-compatible object config.
  */
 export async function generateSingleElement(prompt: string, canvasW: number, canvasH: number): Promise<any> {
-  const systemPrompt = `You are a design assistant. The user wants to add ONE element to their ${canvasW}x${canvasH} canvas.
+  const systemPrompt = `You are "nanobanana", an expert image generation software. The user wants to add ONE element to their ${canvasW}x${canvasH} canvas.
 Based on their request, output ONLY a single JSON object (not an array) for a Fabric.js object.
 
 Supported types and their required properties:
@@ -173,65 +197,82 @@ Respond with ONLY the JSON object.`;
 
 /**
  * Generates a high-quality graphic element for the canvas.
- * Strategy: Lexica AI art → Lorem Picsum stock → Gemini SVG rendered to PNG.
+ * Strategy: Uses Gemini to map the prompt to a specific Iconify SVG icon and color.
  */
 export async function generateVectorGraphic(prompt: string): Promise<string> {
-  // Step 1: Use Gemini to extract search keywords
-  let searchKeywords = prompt;
+  // Step 1: Use Gemini to pick the best icon and color
+  let iconName = 'mdi:star';
+  let iconColor = 'currentColor';
+
   try {
-    const result = await geminiRequest(
-      `Extract 1-2 short English keywords for an image search matching: "${prompt}". 
-Output ONLY the keywords, nothing else. Example: "golden trophy" → "trophy gold"`
-    );
-    searchKeywords = result.text.trim().replace(/[^a-zA-Z0-9 ]/g, '') || prompt;
-  } catch {
-    searchKeywords = prompt.split(' ').slice(0, 2).join(' ');
+    const systemPrompt = `You are "nanobanana", a strict graphic design API and image generation software. The user wants to add an icon graphic: "${prompt}".
+Find the single most appropriate SVG icon from standard icon sets (mdi, ph, tabler, fluent, lucide).
+Also choose a fitting vibrant hex color for it.
+
+Output MUST be a JSON object with EXACTLY two keys:
+{"icon": "collection:name", "color": "#hexcode"}
+
+Examples:
+"golden trophy" -> {"icon": "mdi:trophy", "color": "#fbbf24"}
+"fire flame" -> {"icon": "ph:fire-fill", "color": "#ef4444"}
+"cute monster" -> {"icon": "mdi:space-invaders", "color": "#8b5cf6"}
+"blue heart" -> {"icon": "mdi:heart", "color": "#3b82f6"}
+
+Output ONLY the JSON object, absolutely NO markdown or backticks.`;
+
+    const result = await geminiRequest(systemPrompt, true);
+    if (result.json && result.json.icon) {
+      iconName = result.json.icon;
+      iconColor = result.json.color || '#6366f1';
+    }
+  } catch (err) {
+    console.warn('Gemini icon selection failed, falling back to keywords.', err);
+    iconName = 'radix-icons:image';
+    iconColor = '#6366f1';
   }
 
-  // Step 2: Try Lexica.art (high-quality AI art, CORS-friendly)
+  // Step 2: Fetch the actual raw SVG code from Iconify API
   try {
-    const lexicaResp = await fetch(`https://lexica.art/api/v1/search?q=${encodeURIComponent(searchKeywords)}`);
-    if (lexicaResp.ok) {
-      const data = await lexicaResp.json();
-      if (data.images && data.images.length > 0) {
-        // Pick a random image from top 5 results
-        const pick = data.images[Math.floor(Math.random() * Math.min(5, data.images.length))];
-        const imgUrl = pick.srcSmall || pick.src;
-        const loaded = await loadImageWithTimeout(imgUrl, 8000);
-        if (loaded) return loaded;
+    const [prefix, name] = iconName.split(':');
+    const svgResp = await fetch(`https://api.iconify.design/${prefix}/${name}.svg?color=${encodeURIComponent(iconColor)}&width=200&height=200`);
+    
+    if (svgResp.ok) {
+      let svgText = await svgResp.text();
+      // Ensure it renders well
+      if (!svgText.includes('xmlns=')) {
+        svgText = svgText.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
       }
+
+      // Convert SVG to PNG via blob to avoid Fabric's path parsing issues
+      return new Promise((resolve, reject) => {
+        const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 200;
+          canvas.height = 200;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, 200, 200);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('SVG icon render failed'));
+        };
+        img.src = url;
+      });
     }
-  } catch { /* continue */ }
+  } catch (err) {
+    console.error('Failed to fetch icon from Iconify', err);
+  }
 
-  // Step 3: Try Lorem Picsum (always works, CORS-friendly, random photo)
-  try {
-    const seed = encodeURIComponent(searchKeywords.replace(/\s+/g, '-'));
-    const picsumUrl = `https://picsum.photos/seed/${seed}/512/512`;
-    const loaded = await loadImageWithTimeout(picsumUrl, 8000);
-    if (loaded) return loaded;
-  } catch { /* continue */ }
-
-  // Step 4: Gemini SVG → render to PNG (most reliable fallback)
+  // Step 3: Fallback if everything else fails
   return await generateSVGasPNG(prompt);
 }
 
-function loadImageWithTimeout(url: string, timeoutMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const timer = setTimeout(() => { img.src = ''; reject(new Error('Timeout')); }, timeoutMs);
-    img.onload = () => {
-      clearTimeout(timer);
-      if (img.naturalWidth >= 50 && img.naturalHeight >= 50) {
-        resolve(url);
-      } else {
-        reject(new Error('Image too small'));
-      }
-    };
-    img.onerror = () => { clearTimeout(timer); reject(new Error('Load failed')); };
-    img.src = url;
-  });
-}
+
 
 /**
  * Generates SVG via Gemini, renders it to an offscreen canvas, and returns a PNG data URL.
